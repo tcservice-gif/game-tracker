@@ -431,6 +431,30 @@
     .entry-actions { grid-column: 1 / -1; grid-row: 3; justify-content: flex-start; margin-top: 4px; }
   }
 
+  /* 唯讀模式提示條 */
+  .readonly-banner {
+    background: rgba(196, 168, 122, 0.15);
+    border: 1px solid var(--st-4);
+    color: var(--text);
+    padding: 12px 16px;
+    border-radius: 6px;
+    margin-bottom: 20px;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .readonly-banner .left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .readonly-banner .icon {
+    font-size: 16px;
+  }
+
   /* Loading state */
   .loading {
     padding: 60px;
@@ -444,12 +468,21 @@
 <body>
 <div class="container">
 
+  <div class="readonly-banner" id="readonlyBanner" style="display:none;">
+    <div class="left">
+      <span class="icon">👁</span>
+      <span>你正在檢視<strong>分享快照</strong>(唯讀模式),任何變動都不會被儲存</span>
+    </div>
+    <button class="ghost" id="btnExitReadonly" style="padding: 6px 12px; font-size: 12px;">開啟我自己的追蹤頁</button>
+  </div>
+
   <header>
     <div class="title-block">
       <h1><span class="dot"></span>遊戲館進度追蹤</h1>
       <p>GAME_HALL_PROGRESS_TRACKER / v1.0</p>
     </div>
     <div class="header-actions">
+      <button class="ghost" id="btnShare">🔗 分享連結</button>
       <button class="ghost" id="btnCopy">📋 複製回覆</button>
       <button class="primary" id="btnAdd">＋ 新增項目</button>
     </div>
@@ -501,6 +534,25 @@
   </div>
 </div>
 
+<!-- Share Modal -->
+<div class="modal-backdrop" id="shareModal">
+  <div class="modal">
+    <h2>分享連結</h2>
+    <p style="font-size: 13px; color: var(--text-dim); margin-bottom: 16px; line-height: 1.6;">
+      這條連結包含目前所有資料的快照。對方點開會看到跟你現在一樣的內容,且為「唯讀模式」,不會影響到你的資料。
+    </p>
+    <div class="form-field">
+      <label>分享連結</label>
+      <textarea id="shareUrl" readonly style="font-family: 'JetBrains Mono', monospace; font-size: 12px; word-break: break-all;"></textarea>
+    </div>
+    <div style="font-size: 12px; color: var(--text-faint); font-family: 'JetBrains Mono', monospace;" id="shareInfo"></div>
+    <div class="modal-actions">
+      <button class="ghost" id="btnCloseShare">關閉</button>
+      <button class="primary" id="btnCopyShareUrl">📋 複製連結</button>
+    </div>
+  </div>
+</div>
+
 <!-- Copy Modal -->
 <div class="modal-backdrop" id="copyModal">
   <div class="modal">
@@ -531,25 +583,71 @@
   let editingId = null;
   let filterStatus = null;
   let searchQuery = '';
+  let isReadonly = false;  // 唯讀模式(透過分享連結進入)
 
   const STORAGE_KEY = 'game_hall_entries_v1';
 
+  // ============ 網址編碼/解碼 ============
+  // 用 base64(unicode 安全) 把陣列編碼進網址
+  function encodeData(data) {
+    const json = JSON.stringify(data);
+    // 用 encodeURIComponent + btoa 處理中文
+    const b64 = btoa(unescape(encodeURIComponent(json)));
+    // 網址安全的 base64
+    return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+
+  function decodeData(str) {
+    try {
+      // 還原 base64
+      let b64 = str.replace(/-/g, '+').replace(/_/g, '/');
+      while (b64.length % 4) b64 += '=';
+      const json = decodeURIComponent(escape(atob(b64)));
+      return JSON.parse(json);
+    } catch (e) {
+      console.error('解碼失敗', e);
+      return null;
+    }
+  }
+
   // ============ 載入/儲存 ============
   async function loadEntries() {
+    // 優先檢查網址是否有分享資料
+    const params = new URLSearchParams(window.location.search);
+    const sharedData = params.get('data');
+    if (sharedData) {
+      const decoded = decodeData(sharedData);
+      if (decoded && Array.isArray(decoded)) {
+        entries = decoded;
+        isReadonly = true;
+        enterReadonlyMode();
+        render();
+        return;
+      }
+    }
+
+    // 非分享模式,從 storage 讀取
     try {
       const result = await window.storage.get(STORAGE_KEY);
       if (result && result.value) {
         entries = JSON.parse(result.value);
       }
     } catch (e) {
-      // 第一次使用,沒有資料
       entries = getDefaultEntries();
       await saveEntries();
     }
     render();
   }
 
+  function enterReadonlyMode() {
+    document.getElementById('readonlyBanner').style.display = '';
+    // 隱藏會改動資料的按鈕
+    document.getElementById('btnAdd').style.display = 'none';
+    document.getElementById('btnShare').style.display = 'none';
+  }
+
   async function saveEntries() {
+    if (isReadonly) return;  // 唯讀模式不儲存
     try {
       await window.storage.set(STORAGE_KEY, JSON.stringify(entries));
     } catch (e) {
@@ -664,25 +762,26 @@
         <div>遊戲館</div>
         <div>狀態</div>
         <div>說明</div>
-        <div style="text-align:right;">編輯</div>
+        ${isReadonly ? '' : '<div style="text-align:right;">編輯</div>'}
       </div>
     `;
 
     const rows = list.map((e) => {
       const s = STATUS_MAP[e.status] || STATUS_MAP['1'];
       return `
-        <div class="entry" data-id="${e.id}">
+        <div class="entry" data-id="${e.id}" ${isReadonly ? 'style="grid-template-columns: 200px 160px 1fr;"' : ''}>
           <div class="entry-name">${escapeHtml(e.name)}</div>
           <span class="status-badge" style="--status-color: ${s.color}; --status-bg: ${s.bg}">${s.label}</span>
           <div class="entry-desc">${escapeHtml(e.desc)}</div>
+          ${isReadonly ? '' : `
           <div class="entry-actions">
             <button class="icon-btn btn-edit" data-id="${e.id}">編輯</button>
-          </div>
+          </div>`}
         </div>
       `;
     }).join('');
 
-    wrap.innerHTML = header + rows;
+    wrap.innerHTML = (isReadonly ? `<style>.entry-header { grid-template-columns: 200px 160px 1fr !important; }</style>` : '') + header + rows;
 
     wrap.querySelectorAll('.btn-edit').forEach(btn => {
       btn.addEventListener('click', (ev) => {
@@ -810,6 +909,76 @@
     }
   }
 
+  // ============ 分享連結 ============
+  function openShareModal() {
+    // 用目前的篩選結果來分享(若沒篩選則全部)
+    let list = entries.slice();
+    if (filterStatus) list = list.filter(e => e.status === filterStatus);
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      list = list.filter(e => e.name.toLowerCase().includes(q) || e.desc.toLowerCase().includes(q));
+    }
+
+    if (list.length === 0) {
+      showToast('沒有內容可分享');
+      return;
+    }
+
+    const encoded = encodeData(list);
+    const baseUrl = window.location.href.split('?')[0].split('#')[0];
+    const shareUrl = `${baseUrl}?data=${encoded}`;
+
+    document.getElementById('shareUrl').value = shareUrl;
+
+    // 顯示資訊
+    const urlSize = new Blob([shareUrl]).size;
+    const info = document.getElementById('shareInfo');
+    const isLocal = window.location.protocol === 'file:';
+
+    let infoHTML = `共 ${list.length} 筆項目 · 連結長度 ${urlSize} 位元組`;
+    let infoColor = 'var(--text-faint)';
+
+    if (isLocal) {
+      infoHTML = `⚠️ 目前是從本機檔案開啟(file://),這條連結只有你自己能用。要真正分享給別人,需先將 HTML 檔放到雲端(例如 GitHub Pages、Netlify、Google Drive 公開連結等)。`;
+      infoColor = 'var(--st-1)';
+    } else if (urlSize > 8000) {
+      infoHTML = `⚠️ 連結 ${urlSize} 位元組,部分通訊軟體可能無法完整貼上,建議減少項目或縮短說明`;
+      infoColor = 'var(--st-1)';
+    }
+
+    info.innerHTML = infoHTML;
+    info.style.color = infoColor;
+
+    document.getElementById('shareModal').classList.add('open');
+    setTimeout(() => {
+      const ta = document.getElementById('shareUrl');
+      ta.focus();
+      ta.select();
+    }, 50);
+  }
+
+  function closeShareModal() {
+    document.getElementById('shareModal').classList.remove('open');
+  }
+
+  async function copyShareUrl() {
+    const url = document.getElementById('shareUrl').value;
+    try {
+      await navigator.clipboard.writeText(url);
+      showToast('連結已複製');
+      closeShareModal();
+    } catch {
+      document.getElementById('shareUrl').select();
+      try { document.execCommand('copy'); showToast('連結已複製'); closeShareModal(); }
+      catch { showToast('請手動選取複製'); }
+    }
+  }
+
+  function exitReadonly() {
+    // 導回不帶參數的網址
+    window.location.href = window.location.href.split('?')[0].split('#')[0];
+  }
+
   // ============ Toast ============
   let toastTimer;
   function showToast(msg) {
@@ -828,6 +997,10 @@
   document.getElementById('btnCopy').addEventListener('click', openCopyModal);
   document.getElementById('btnCloseCopy').addEventListener('click', closeCopyModal);
   document.getElementById('btnDoCopy').addEventListener('click', doCopy);
+  document.getElementById('btnShare').addEventListener('click', openShareModal);
+  document.getElementById('btnCloseShare').addEventListener('click', closeShareModal);
+  document.getElementById('btnCopyShareUrl').addEventListener('click', copyShareUrl);
+  document.getElementById('btnExitReadonly').addEventListener('click', exitReadonly);
 
   document.getElementById('searchInput').addEventListener('input', (e) => {
     searchQuery = e.target.value;
@@ -848,12 +1021,16 @@
   document.getElementById('copyModal').addEventListener('click', (e) => {
     if (e.target.id === 'copyModal') closeCopyModal();
   });
+  document.getElementById('shareModal').addEventListener('click', (e) => {
+    if (e.target.id === 'shareModal') closeShareModal();
+  });
 
   // ESC 關閉
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       closeEditModal();
       closeCopyModal();
+      closeShareModal();
     }
     // Ctrl/Cmd + Enter 儲存
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && document.getElementById('editModal').classList.contains('open')) {
