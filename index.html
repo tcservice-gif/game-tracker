@@ -212,7 +212,7 @@
 
   .entry-header {
     display: grid;
-    grid-template-columns: 200px 160px 1fr 90px;
+    grid-template-columns: 180px 140px 1fr 110px 80px;
     gap: 16px;
     padding: 12px 20px;
     background: var(--bg-card);
@@ -227,7 +227,7 @@
 
   .entry {
     display: grid;
-    grid-template-columns: 200px 160px 1fr 90px;
+    grid-template-columns: 180px 140px 1fr 110px 80px;
     gap: 16px;
     padding: 14px 20px;
     border-bottom: 1px solid var(--border);
@@ -250,6 +250,13 @@
     line-height: 1.7;
     white-space: pre-wrap;
     word-break: break-word;
+  }
+
+  .entry-date {
+    font-size: 12px;
+    color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+    white-space: nowrap;
   }
 
   .status-badge {
@@ -428,7 +435,8 @@
     .entry-name { grid-column: 1; grid-row: 1; }
     .entry .status-badge { grid-column: 2; grid-row: 1; }
     .entry-desc { grid-column: 1 / -1; grid-row: 2; }
-    .entry-actions { grid-column: 1 / -1; grid-row: 3; justify-content: flex-start; margin-top: 4px; }
+    .entry-date { grid-column: 1 / -1; grid-row: 3; }
+    .entry-actions { grid-column: 1 / -1; grid-row: 4; justify-content: flex-start; margin-top: 4px; }
   }
 
   /* 唯讀模式提示條 */
@@ -631,6 +639,12 @@
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
         entries = JSON.parse(stored);
+        // 向下相容:舊資料沒有 updatedAt,補上目前時間
+        let needSave = false;
+        entries.forEach(e => {
+          if (!e.updatedAt) { e.updatedAt = Date.now(); needSave = true; }
+        });
+        if (needSave) saveEntries();
       } else {
         // 第一次使用,載入預設範例
         entries = getDefaultEntries();
@@ -661,36 +675,58 @@
   }
 
   function getDefaultEntries() {
+    const now = Date.now();
     return [
       {
         id: genId(),
         name: '[BE真人(TNT真人)]',
         status: '1',
-        desc: '廠商大廳所有桌次維護中,進去也無法玩。廠商說明無限期維護中。\n目前看正式環境真人已有開放桌次,因真人電子遊戲館拆開的部分還在進行中,目前先不開放,待下次更新後更換參數再行測試。\n測試環境目前已更新完成,且已測試下注/轉帳皆正常。'
+        desc: '廠商大廳所有桌次維護中,進去也無法玩。廠商說明無限期維護中。\n目前看正式環境真人已有開放桌次,因真人電子遊戲館拆開的部分還在進行中,目前先不開放,待下次更新後更換參數再行測試。\n測試環境目前已更新完成,且已測試下注/轉帳皆正常。',
+        updatedAt: now
       },
       {
         id: genId(),
         name: '[BE電子(TNT電子)]',
         status: '2',
-        desc: '待製圖完成後即可上線。\n圖片已完成,測試環境已拆成2間遊戲館,已測試。\n正式環境還沒拆,但圖片已更新,顯示正常。'
+        desc: '待製圖完成後即可上線。\n圖片已完成,測試環境已拆成2間遊戲館,已測試。\n正式環境還沒拆,但圖片已更新,顯示正常。',
+        updatedAt: now
       },
       {
         id: genId(),
         name: '[ASK電子]',
         status: '1',
-        desc: '廠商大廳測試到有遊戲會閃退,處理中。\n這部分之前廠商有將問題遊戲關閉,星期一再請技客確認一次。'
+        desc: '廠商大廳測試到有遊戲會閃退,處理中。\n這部分之前廠商有將問題遊戲關閉,星期一再請技客確認一次。',
+        updatedAt: now
       },
       {
         id: genId(),
         name: '[百勝棋牌]',
         status: '1',
-        desc: '4款遊戲(安達巴哈、炸金花、拉密、七上七下)顯示英文,其餘為簡體中文(不支援繁體)。\n開發完成,星期一再跟技客確認測試情況。'
+        desc: '4款遊戲(安達巴哈、炸金花、拉密、七上七下)顯示英文,其餘為簡體中文(不支援繁體)。\n開發完成,星期一再跟技客確認測試情況。',
+        updatedAt: now
       },
     ];
   }
 
   function genId() {
     return 'e_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  }
+
+  // 格式化日期:返回 MM/DD HH:mm,如果不是今年則顯示 YYYY/MM/DD
+  function formatDate(timestamp) {
+    if (!timestamp) return '—';
+    const d = new Date(timestamp);
+    const now = new Date();
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mi = String(d.getMinutes()).padStart(2, '0');
+
+    if (yyyy !== now.getFullYear()) {
+      return `${yyyy}/${mm}/${dd}`;
+    }
+    return `${mm}/${dd} ${hh}:${mi}`;
   }
 
   // ============ 渲染 ============
@@ -766,6 +802,7 @@
         <div>遊戲館</div>
         <div>狀態</div>
         <div>說明</div>
+        <div>更新日期</div>
         ${isReadonly ? '' : '<div style="text-align:right;">編輯</div>'}
       </div>
     `;
@@ -773,10 +810,11 @@
     const rows = list.map((e) => {
       const s = STATUS_MAP[e.status] || STATUS_MAP['1'];
       return `
-        <div class="entry" data-id="${e.id}" ${isReadonly ? 'style="grid-template-columns: 200px 160px 1fr;"' : ''}>
+        <div class="entry" data-id="${e.id}" ${isReadonly ? 'style="grid-template-columns: 180px 140px 1fr 110px;"' : ''}>
           <div class="entry-name">${escapeHtml(e.name)}</div>
           <span class="status-badge" style="--status-color: ${s.color}; --status-bg: ${s.bg}">${s.label}</span>
           <div class="entry-desc">${escapeHtml(e.desc)}</div>
+          <div class="entry-date">${formatDate(e.updatedAt)}</div>
           ${isReadonly ? '' : `
           <div class="entry-actions">
             <button class="icon-btn btn-edit" data-id="${e.id}">編輯</button>
@@ -785,7 +823,7 @@
       `;
     }).join('');
 
-    wrap.innerHTML = (isReadonly ? `<style>.entry-header { grid-template-columns: 200px 160px 1fr !important; }</style>` : '') + header + rows;
+    wrap.innerHTML = (isReadonly ? `<style>.entry-header { grid-template-columns: 180px 140px 1fr 110px !important; }</style>` : '') + header + rows;
 
     wrap.querySelectorAll('.btn-edit').forEach(btn => {
       btn.addEventListener('click', (ev) => {
@@ -839,11 +877,12 @@
       showToast('請填寫遊戲館名稱');
       return;
     }
+    const now = Date.now();
     if (editingId) {
       const e = entries.find(x => x.id === editingId);
-      if (e) { e.name = name; e.status = status; e.desc = desc; }
+      if (e) { e.name = name; e.status = status; e.desc = desc; e.updatedAt = now; }
     } else {
-      entries.push({ id: genId(), name, status, desc });
+      entries.push({ id: genId(), name, status, desc, updatedAt: now });
     }
     saveEntries();
     closeEditModal();
@@ -877,7 +916,8 @@
 
     return list.map((e, i) => {
       const s = STATUS_MAP[e.status];
-      return `${i + 1}. ${e.name} ${s.label}\n${e.desc}`;
+      const date = e.updatedAt ? ` (${formatDate(e.updatedAt)})` : '';
+      return `${i + 1}. ${e.name} ${s.label}${date}\n${e.desc}`;
     }).join('\n\n');
   }
 
