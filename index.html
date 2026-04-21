@@ -626,15 +626,19 @@
       }
     }
 
-    // 非分享模式,從 storage 讀取
+    // 非分享模式,從 localStorage 讀取
     try {
-      const result = await window.storage.get(STORAGE_KEY);
-      if (result && result.value) {
-        entries = JSON.parse(result.value);
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        entries = JSON.parse(stored);
+      } else {
+        // 第一次使用,載入預設範例
+        entries = getDefaultEntries();
+        saveEntries();
       }
     } catch (e) {
+      console.error('讀取失敗', e);
       entries = getDefaultEntries();
-      await saveEntries();
     }
     render();
   }
@@ -646,10 +650,10 @@
     document.getElementById('btnShare').style.display = 'none';
   }
 
-  async function saveEntries() {
+  function saveEntries() {
     if (isReadonly) return;  // 唯讀模式不儲存
     try {
-      await window.storage.set(STORAGE_KEY, JSON.stringify(entries));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
     } catch (e) {
       console.error('儲存失敗', e);
       showToast('儲存失敗');
@@ -841,7 +845,7 @@
     } else {
       entries.push({ id: genId(), name, status, desc });
     }
-    await saveEntries();
+    saveEntries();
     closeEditModal();
     render();
     showToast('已儲存');
@@ -851,7 +855,7 @@
     if (!editingId) return;
     if (!confirm('確定要刪除這個項目嗎?')) return;
     entries = entries.filter(x => x.id !== editingId);
-    await saveEntries();
+    saveEntries();
     closeEditModal();
     render();
     showToast('已刪除');
