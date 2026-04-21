@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>遊戲館進度追蹤</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+TC:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f5f2ed;
+    --bg-elev: #ffffff;
+    --bg-card: #faf8f4;
+    --border: #e5e0d8;
+    --border-strong: #d4cdc1;
+    --text: #4a4640;
+    --text-dim: #8a8275;
+    --text-faint: #b5ad9f;
+    --accent: #a89b82;
+    --accent-dim: #c9bfa8;
+
+    /* 莫蘭迪狀態色 */
+    --st-1: #b87a7a;  /* 封測測試中 - 莫蘭迪紅/磚色 */
+    --st-2: #8ba3b5;  /* 封測測試完成 - 莫蘭迪藍灰 */
+    --st-3: #a89bb0;  /* 待Proxy更新前哨 - 莫蘭迪紫灰 */
+    --st-4: #c4a87a;  /* 前哨測試中 - 莫蘭迪黃褐 */
+    --st-5: #9bb094;  /* 前哨測試完成 - 莫蘭迪綠 */
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Noto Sans TC', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 32px 24px 80px;
+    background-image:
+      radial-gradient(circle at 20% 0%, rgba(168, 155, 130, 0.08), transparent 40%),
+      radial-gradient(circle at 80% 20%, rgba(139, 163, 181, 0.06), transparent 40%);
+  }
+
+  .container { max-width: 1200px; margin: 0 auto; }
+
+  /* Header */
+  header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    padding-bottom: 20px;
+    margin-bottom: 28px;
+    border-bottom: 1px solid var(--border);
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+  .title-block h1 {
+    font-size: 28px;
+    font-weight: 900;
+    letter-spacing: -0.02em;
+    margin-bottom: 4px;
+  }
+  .title-block h1 .dot {
+    display: inline-block;
+    width: 10px; height: 10px;
+    background: var(--accent);
+    border-radius: 50%;
+    margin-right: 10px;
+    box-shadow: 0 0 8px rgba(168, 155, 130, 0.4);
+    vertical-align: middle;
+  }
+  .title-block p {
+    color: var(--text-dim);
+    font-size: 13px;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.02em;
+  }
+
+  .header-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+  button {
+    font-family: inherit;
+    font-weight: 500;
+    font-size: 13px;
+    border: 1px solid var(--border-strong);
+    background: var(--bg-elev);
+    color: var(--text);
+    padding: 9px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  button:hover {
+    background: var(--bg-card);
+    border-color: var(--text-faint);
+  }
+  button.primary {
+    background: var(--accent);
+    color: #ffffff;
+    border-color: var(--accent);
+    font-weight: 600;
+  }
+  button.primary:hover {
+    background: #968869;
+    border-color: #968869;
+  }
+  button.ghost {
+    background: transparent;
+    border-color: var(--border);
+  }
+  button.danger {
+    color: var(--st-1);
+    border-color: var(--border);
+  }
+  button.danger:hover {
+    background: rgba(184, 122, 122, 0.08);
+    border-color: var(--st-1);
+  }
+
+  /* Stats row */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 12px;
+    margin-bottom: 28px;
+  }
+  .stat-card {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--bar);
+    border-radius: 6px;
+    padding: 14px 16px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .stat-card:hover {
+    background: var(--bg-card);
+    box-shadow: 0 2px 8px rgba(74, 70, 64, 0.06);
+  }
+  .stat-card.active {
+    background: var(--bg-card);
+    border-color: var(--bar);
+    box-shadow: 0 2px 12px rgba(74, 70, 64, 0.08);
+  }
+  .stat-card .label {
+    font-size: 11px;
+    color: var(--text-dim);
+    font-weight: 500;
+    margin-bottom: 6px;
+    letter-spacing: 0.03em;
+  }
+  .stat-card .count {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--bar);
+  }
+
+  /* Filter bar */
+  .filter-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+  .search {
+    flex: 1;
+    min-width: 240px;
+    position: relative;
+  }
+  .search input {
+    width: 100%;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 10px 14px 10px 36px;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 14px;
+    transition: border-color 0.15s;
+  }
+  .search input:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+  .search::before {
+    content: '⌕';
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-faint);
+    font-size: 16px;
+  }
+  .filter-info {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+
+  /* Table */
+  .entries-wrap {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .entry-header {
+    display: grid;
+    grid-template-columns: 200px 160px 1fr 90px;
+    gap: 16px;
+    padding: 12px 20px;
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border-strong);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .entry {
+    display: grid;
+    grid-template-columns: 200px 160px 1fr 90px;
+    gap: 16px;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    align-items: center;
+    transition: background 0.12s;
+  }
+  .entry:last-child { border-bottom: none; }
+  .entry:hover { background: var(--bg-card); }
+
+  .entry-name {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--text);
+    word-break: break-word;
+  }
+
+  .entry-desc {
+    font-size: 13px;
+    color: var(--text-dim);
+    line-height: 1.7;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 5px 10px;
+    border-radius: 4px;
+    background: var(--status-bg);
+    color: var(--status-color);
+    border: 1px solid var(--status-color);
+    font-family: 'Noto Sans TC', sans-serif;
+    white-space: nowrap;
+    width: fit-content;
+  }
+  .status-badge::before {
+    content: '';
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--status-color);
+  }
+
+  .entry-actions {
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
+  }
+  .icon-btn {
+    padding: 6px 10px;
+    font-size: 12px;
+    background: transparent;
+    border: 1px solid var(--border);
+  }
+
+  .empty {
+    padding: 60px 20px;
+    text-align: center;
+    color: var(--text-faint);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+  }
+
+  /* Modal */
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(74, 70, 64, 0.35);
+    backdrop-filter: blur(4px);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    padding: 20px;
+  }
+  .modal-backdrop.open { display: flex; }
+  .modal {
+    background: var(--bg-elev);
+    border: 1px solid var(--border-strong);
+    border-radius: 10px;
+    width: 100%;
+    max-width: 560px;
+    max-height: 90vh;
+    overflow-y: auto;
+    padding: 28px;
+    box-shadow: 0 12px 40px rgba(74, 70, 64, 0.15);
+  }
+  .modal h2 {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .modal h2::before {
+    content: '';
+    width: 4px; height: 18px;
+    background: var(--accent);
+    border-radius: 2px;
+  }
+
+  .form-field { margin-bottom: 16px; }
+  .form-field label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+    letter-spacing: 0.02em;
+  }
+  .form-field input,
+  .form-field textarea,
+  .form-field select {
+    width: 100%;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 10px 12px;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 14px;
+    transition: border-color 0.15s;
+  }
+  .form-field input:focus,
+  .form-field textarea:focus,
+  .form-field select:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+  .form-field textarea {
+    resize: vertical;
+    min-height: 100px;
+    line-height: 1.6;
+    font-family: inherit;
+  }
+
+  .modal-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+  }
+
+  /* Copy preview modal */
+  .copy-preview {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    line-height: 1.8;
+    white-space: pre-wrap;
+    max-height: 400px;
+    overflow-y: auto;
+    color: var(--text);
+  }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%) translateY(100px);
+    background: var(--bg-elev);
+    border: 1px solid var(--accent);
+    color: var(--text);
+    padding: 12px 20px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    opacity: 0;
+    transition: all 0.3s ease;
+    z-index: 200;
+    box-shadow: 0 8px 24px rgba(74, 70, 64, 0.12);
+  }
+  .toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+
+  /* 響應式 */
+  @media (max-width: 900px) {
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .entry-header { display: none; }
+    .entry {
+      grid-template-columns: 1fr auto;
+      gap: 8px 12px;
+      padding: 14px 16px;
+      align-items: start;
+    }
+    .entry-name { grid-column: 1; grid-row: 1; }
+    .entry .status-badge { grid-column: 2; grid-row: 1; }
+    .entry-desc { grid-column: 1 / -1; grid-row: 2; }
+    .entry-actions { grid-column: 1 / -1; grid-row: 3; justify-content: flex-start; margin-top: 4px; }
+  }
+
+  /* Loading state */
+  .loading {
+    padding: 60px;
+    text-align: center;
+    color: var(--text-faint);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="title-block">
+      <h1><span class="dot"></span>遊戲館進度追蹤</h1>
+      <p>GAME_HALL_PROGRESS_TRACKER / v1.0</p>
+    </div>
+    <div class="header-actions">
+      <button class="ghost" id="btnCopy">📋 複製回覆</button>
+      <button class="primary" id="btnAdd">＋ 新增項目</button>
+    </div>
+  </header>
+
+  <div class="stats" id="stats"></div>
+
+  <div class="filter-bar">
+    <div class="search">
+      <input type="text" id="searchInput" placeholder="搜尋遊戲館名稱或說明...">
+    </div>
+    <div class="filter-info" id="filterInfo"></div>
+    <button class="ghost" id="btnClearFilter" style="display:none;">清除篩選</button>
+  </div>
+
+  <div class="entries-wrap" id="entriesWrap">
+    <div class="loading">載入中...</div>
+  </div>
+
+</div>
+
+<!-- Edit Modal -->
+<div class="modal-backdrop" id="editModal">
+  <div class="modal">
+    <h2 id="modalTitle">新增項目</h2>
+    <div class="form-field">
+      <label for="fName">遊戲館名稱</label>
+      <input type="text" id="fName" placeholder="例如:[BE真人(TNT真人)]">
+    </div>
+    <div class="form-field">
+      <label for="fStatus">狀態</label>
+      <select id="fStatus">
+        <option value="1">封測測試中</option>
+        <option value="2">封測測試完成</option>
+        <option value="3">待Proxy更新前哨</option>
+        <option value="4">前哨測試中</option>
+        <option value="5">前哨測試完成</option>
+      </select>
+    </div>
+    <div class="form-field">
+      <label for="fDesc">進度說明</label>
+      <textarea id="fDesc" placeholder="描述目前的進度、問題、後續安排..."></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="danger" id="btnDelete" style="display:none;">刪除</button>
+      <button class="ghost" id="btnCancel">取消</button>
+      <button class="primary" id="btnSave">儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Copy Modal -->
+<div class="modal-backdrop" id="copyModal">
+  <div class="modal">
+    <h2>複製回覆訊息</h2>
+    <div class="copy-preview" id="copyPreview"></div>
+    <div class="modal-actions">
+      <button class="ghost" id="btnCloseCopy">關閉</button>
+      <button class="primary" id="btnDoCopy">📋 複製到剪貼簿</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  // ============ 狀態定義 ============
+  const STATUS_MAP = {
+    '1': { label: '封測測試中',       color: 'var(--st-1)', bg: 'rgba(184, 122, 122, 0.1)' },
+    '2': { label: '封測測試完成',     color: 'var(--st-2)', bg: 'rgba(139, 163, 181, 0.12)' },
+    '3': { label: '待Proxy更新前哨',  color: 'var(--st-3)', bg: 'rgba(168, 155, 176, 0.12)' },
+    '4': { label: '前哨測試中',       color: 'var(--st-4)', bg: 'rgba(196, 168, 122, 0.12)' },
+    '5': { label: '前哨測試完成',     color: 'var(--st-5)', bg: 'rgba(155, 176, 148, 0.14)' },
+  };
+  const STATUS_ORDER = ['1','2','3','4','5'];
+
+  // ============ 狀態 ============
+  let entries = [];
+  let editingId = null;
+  let filterStatus = null;
+  let searchQuery = '';
+
+  const STORAGE_KEY = 'game_hall_entries_v1';
+
+  // ============ 載入/儲存 ============
+  async function loadEntries() {
+    try {
+      const result = await window.storage.get(STORAGE_KEY);
+      if (result && result.value) {
+        entries = JSON.parse(result.value);
+      }
+    } catch (e) {
+      // 第一次使用,沒有資料
+      entries = getDefaultEntries();
+      await saveEntries();
+    }
+    render();
+  }
+
+  async function saveEntries() {
+    try {
+      await window.storage.set(STORAGE_KEY, JSON.stringify(entries));
+    } catch (e) {
+      console.error('儲存失敗', e);
+      showToast('儲存失敗');
+    }
+  }
+
+  function getDefaultEntries() {
+    return [
+      {
+        id: genId(),
+        name: '[BE真人(TNT真人)]',
+        status: '1',
+        desc: '廠商大廳所有桌次維護中,進去也無法玩。廠商說明無限期維護中。\n目前看正式環境真人已有開放桌次,因真人電子遊戲館拆開的部分還在進行中,目前先不開放,待下次更新後更換參數再行測試。\n測試環境目前已更新完成,且已測試下注/轉帳皆正常。'
+      },
+      {
+        id: genId(),
+        name: '[BE電子(TNT電子)]',
+        status: '2',
+        desc: '待製圖完成後即可上線。\n圖片已完成,測試環境已拆成2間遊戲館,已測試。\n正式環境還沒拆,但圖片已更新,顯示正常。'
+      },
+      {
+        id: genId(),
+        name: '[ASK電子]',
+        status: '1',
+        desc: '廠商大廳測試到有遊戲會閃退,處理中。\n這部分之前廠商有將問題遊戲關閉,星期一再請技客確認一次。'
+      },
+      {
+        id: genId(),
+        name: '[百勝棋牌]',
+        status: '1',
+        desc: '4款遊戲(安達巴哈、炸金花、拉密、七上七下)顯示英文,其餘為簡體中文(不支援繁體)。\n開發完成,星期一再跟技客確認測試情況。'
+      },
+    ];
+  }
+
+  function genId() {
+    return 'e_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  }
+
+  // ============ 渲染 ============
+  function render() {
+    renderStats();
+    renderEntries();
+  }
+
+  function renderStats() {
+    const counts = {};
+    STATUS_ORDER.forEach(k => counts[k] = 0);
+    entries.forEach(e => { if (counts[e.status] !== undefined) counts[e.status]++; });
+
+    const statsEl = document.getElementById('stats');
+    statsEl.innerHTML = STATUS_ORDER.map(k => {
+      const s = STATUS_MAP[k];
+      const active = filterStatus === k ? 'active' : '';
+      return `
+        <div class="stat-card ${active}" style="--bar: ${s.color}" data-status="${k}">
+          <div class="label">${s.label}</div>
+          <div class="count">${counts[k]}</div>
+        </div>
+      `;
+    }).join('');
+
+    statsEl.querySelectorAll('.stat-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const st = card.dataset.status;
+        filterStatus = filterStatus === st ? null : st;
+        render();
+      });
+    });
+  }
+
+  function renderEntries() {
+    let list = entries.slice();
+
+    // 狀態篩選
+    if (filterStatus) {
+      list = list.filter(e => e.status === filterStatus);
+    }
+    // 搜尋
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      list = list.filter(e =>
+        e.name.toLowerCase().includes(q) || e.desc.toLowerCase().includes(q)
+      );
+    }
+
+    // 排序:依狀態順序,再依名稱
+    list.sort((a, b) => {
+      if (a.status !== b.status) return STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status);
+      return a.name.localeCompare(b.name);
+    });
+
+    // 篩選資訊
+    const info = document.getElementById('filterInfo');
+    const clearBtn = document.getElementById('btnClearFilter');
+    const hasFilter = filterStatus || searchQuery.trim();
+    info.textContent = hasFilter
+      ? `顯示 ${list.length} / ${entries.length} 筆`
+      : `共 ${entries.length} 筆`;
+    clearBtn.style.display = hasFilter ? '' : 'none';
+
+    const wrap = document.getElementById('entriesWrap');
+    if (list.length === 0) {
+      wrap.innerHTML = `<div class="empty">${entries.length === 0 ? '還沒有任何項目,點「新增項目」開始' : '沒有符合條件的項目'}</div>`;
+      return;
+    }
+
+    const header = `
+      <div class="entry-header">
+        <div>遊戲館</div>
+        <div>狀態</div>
+        <div>說明</div>
+        <div style="text-align:right;">編輯</div>
+      </div>
+    `;
+
+    const rows = list.map((e) => {
+      const s = STATUS_MAP[e.status] || STATUS_MAP['1'];
+      return `
+        <div class="entry" data-id="${e.id}">
+          <div class="entry-name">${escapeHtml(e.name)}</div>
+          <span class="status-badge" style="--status-color: ${s.color}; --status-bg: ${s.bg}">${s.label}</span>
+          <div class="entry-desc">${escapeHtml(e.desc)}</div>
+          <div class="entry-actions">
+            <button class="icon-btn btn-edit" data-id="${e.id}">編輯</button>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    wrap.innerHTML = header + rows;
+
+    wrap.querySelectorAll('.btn-edit').forEach(btn => {
+      btn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        openEditModal(btn.dataset.id);
+      });
+    });
+  }
+
+  function escapeHtml(s) {
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  // ============ 新增 / 編輯 ============
+  function openEditModal(id) {
+    editingId = id;
+    const isEdit = !!id;
+    document.getElementById('modalTitle').textContent = isEdit ? '編輯項目' : '新增項目';
+    document.getElementById('btnDelete').style.display = isEdit ? '' : 'none';
+
+    if (isEdit) {
+      const e = entries.find(x => x.id === id);
+      if (!e) return;
+      document.getElementById('fName').value = e.name;
+      document.getElementById('fStatus').value = e.status;
+      document.getElementById('fDesc').value = e.desc;
+    } else {
+      document.getElementById('fName').value = '';
+      document.getElementById('fStatus').value = '1';
+      document.getElementById('fDesc').value = '';
+    }
+    document.getElementById('editModal').classList.add('open');
+    setTimeout(() => document.getElementById('fName').focus(), 50);
+  }
+
+  function closeEditModal() {
+    document.getElementById('editModal').classList.remove('open');
+    editingId = null;
+  }
+
+  async function saveEntry() {
+    const name = document.getElementById('fName').value.trim();
+    const status = document.getElementById('fStatus').value;
+    const desc = document.getElementById('fDesc').value.trim();
+    if (!name) {
+      showToast('請填寫遊戲館名稱');
+      return;
+    }
+    if (editingId) {
+      const e = entries.find(x => x.id === editingId);
+      if (e) { e.name = name; e.status = status; e.desc = desc; }
+    } else {
+      entries.push({ id: genId(), name, status, desc });
+    }
+    await saveEntries();
+    closeEditModal();
+    render();
+    showToast('已儲存');
+  }
+
+  async function deleteEntry() {
+    if (!editingId) return;
+    if (!confirm('確定要刪除這個項目嗎?')) return;
+    entries = entries.filter(x => x.id !== editingId);
+    await saveEntries();
+    closeEditModal();
+    render();
+    showToast('已刪除');
+  }
+
+  // ============ 複製回覆 ============
+  function buildReplyText() {
+    // 使用目前篩選結果
+    let list = entries.slice();
+    if (filterStatus) list = list.filter(e => e.status === filterStatus);
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      list = list.filter(e => e.name.toLowerCase().includes(q) || e.desc.toLowerCase().includes(q));
+    }
+    list.sort((a, b) => {
+      if (a.status !== b.status) return STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status);
+      return a.name.localeCompare(b.name);
+    });
+
+    return list.map((e, i) => {
+      const s = STATUS_MAP[e.status];
+      return `${i + 1}. ${e.name} ${s.label}\n${e.desc}`;
+    }).join('\n\n');
+  }
+
+  function openCopyModal() {
+    const text = buildReplyText();
+    if (!text) {
+      showToast('沒有內容可複製');
+      return;
+    }
+    document.getElementById('copyPreview').textContent = text;
+    document.getElementById('copyModal').classList.add('open');
+  }
+
+  function closeCopyModal() {
+    document.getElementById('copyModal').classList.remove('open');
+  }
+
+  async function doCopy() {
+    const text = document.getElementById('copyPreview').textContent;
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast('已複製到剪貼簿');
+      closeCopyModal();
+    } catch (e) {
+      // fallback
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); showToast('已複製到剪貼簿'); closeCopyModal(); }
+      catch { showToast('複製失敗,請手動選取'); }
+      document.body.removeChild(ta);
+    }
+  }
+
+  // ============ Toast ============
+  let toastTimer;
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('show'), 2000);
+  }
+
+  // ============ 事件綁定 ============
+  document.getElementById('btnAdd').addEventListener('click', () => openEditModal(null));
+  document.getElementById('btnCancel').addEventListener('click', closeEditModal);
+  document.getElementById('btnSave').addEventListener('click', saveEntry);
+  document.getElementById('btnDelete').addEventListener('click', deleteEntry);
+  document.getElementById('btnCopy').addEventListener('click', openCopyModal);
+  document.getElementById('btnCloseCopy').addEventListener('click', closeCopyModal);
+  document.getElementById('btnDoCopy').addEventListener('click', doCopy);
+
+  document.getElementById('searchInput').addEventListener('input', (e) => {
+    searchQuery = e.target.value;
+    render();
+  });
+
+  document.getElementById('btnClearFilter').addEventListener('click', () => {
+    filterStatus = null;
+    searchQuery = '';
+    document.getElementById('searchInput').value = '';
+    render();
+  });
+
+  // 點擊 backdrop 關閉
+  document.getElementById('editModal').addEventListener('click', (e) => {
+    if (e.target.id === 'editModal') closeEditModal();
+  });
+  document.getElementById('copyModal').addEventListener('click', (e) => {
+    if (e.target.id === 'copyModal') closeCopyModal();
+  });
+
+  // ESC 關閉
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      closeEditModal();
+      closeCopyModal();
+    }
+    // Ctrl/Cmd + Enter 儲存
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && document.getElementById('editModal').classList.contains('open')) {
+      saveEntry();
+    }
+  });
+
+  // 啟動
+  loadEntries();
+</script>
+</body>
+</html>
